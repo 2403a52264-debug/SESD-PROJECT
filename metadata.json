@@ -1,0 +1,6 @@
+{
+  "name": "Smart File Organizer",
+  "description": "AI-powered intelligent file management system for automated classification, duplicate detection, rule-based organization, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

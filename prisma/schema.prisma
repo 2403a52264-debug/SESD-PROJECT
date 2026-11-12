@@ -1,0 +1,172 @@
+// Smart File Organizer - Database Schema for PostgreSQL & Prisma ORM
+// College SESD Capstone Project
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  files      File[]
+  activities ActivityHistory[]
+  settings   UserSettings?
+
+  @@index([email])
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  name      String
+  path      String   @unique
+  color     String?
+  parentId  String?
+  parent    Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderHierarchy")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  files             File[]
+  organizationItems OrganizationItem[]
+
+  @@index([path])
+  @@index([parentId])
+}
+
+model File {
+  id               String   @id @default(uuid())
+  name             String
+  originalName     String
+  mimeType         String
+  extension        String
+  size             Int
+  hash             String   // SHA-256 for duplicate detection
+  storagePath      String
+  folderId         String?
+  folder           Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderPath       String   @default("Unorganized")
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isDuplicate      Boolean  @default(false)
+  duplicateGroupId String?
+  previewText      String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  aiResult          AIResult?
+  organizationItems OrganizationItem[]
+
+  @@index([hash])
+  @@index([extension])
+  @@index([folderId])
+  @@index([createdAt])
+}
+
+model AIResult {
+  id              String   @id @default(uuid())
+  fileId          String   @unique
+  file            File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  category        String
+  subcategory     String
+  confidence      Float
+  suggestedFolder String
+  reasoning       String   @db.Text
+  tags            String[] // Postgres array
+  language        String   @default("English")
+  modelUsed       String
+  createdAt       DateTime @default(now())
+
+  @@index([category])
+  @@index([confidence])
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        String   // "DOCUMENT" or "IMAGE"
+  icon        String?
+  color       String?
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+model CustomRule {
+  id                String   @id @default(uuid())
+  name              String
+  enabled           Boolean  @default(true)
+  priority          Int      @default(1)
+  conditionField    String   // "extension" | "filename" | "category" | "size"
+  conditionOperator String   // "equals" | "contains" | "greater_than" | "ends_with"
+  conditionValue    String
+  destinationFolder String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([priority])
+  @@index([enabled])
+}
+
+model OrganizationOperation {
+  id              String   @id @default(uuid())
+  operationType   String   // "ai_category" | "extension" | "date" | "size" | "custom_rules"
+  status          String   @default("applied") // "applied" | "reverted"
+  filesMovedCount Int
+  description     String
+  timestamp       DateTime @default(now())
+
+  items OrganizationItem[]
+}
+
+model OrganizationItem {
+  id                 String                @id @default(uuid())
+  operationId        String
+  operation          OrganizationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  fileId             String
+  file               File                  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  originalFolderId   String?
+  newFolderId        String?
+  newFolder          Folder?               @relation(fields: [newFolderId], references: [id], onDelete: SetNull)
+  originalFolderPath String
+  newFolderPath      String
+  reverted           Boolean               @default(false)
+}
+
+model ActivityHistory {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   String   @db.Text
+  type      String   // "upload" | "classify" | "organize" | "undo" | "delete" | "duplicate_scan" | "settings"
+  timestamp DateTime @default(now())
+  fileId    String?
+
+  @@index([timestamp])
+  @@index([type])
+}
+
+model UserSettings {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiEnabled            Boolean  @default(true)
+  aiProvider           String   @default("gemini") // "gemini" | "openai" | "rule_based"
+  geminiModel          String   @default("gemini-3.8-flash")
+  openaiModel          String   @default("gpt-4o-mini")
+  defaultOrganizeBy    String   @default("ai_category")
+  maxUploadSizeMb      Int      @default(50)
+  autoOrganizeOnUpload Boolean  @default(false)
+  ignoredExtensions    String[] @default([".tmp", ".ds_store"])
+  theme                String   @default("dark")
+  updatedAt            DateTime @updatedAt
+}
